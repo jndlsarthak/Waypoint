@@ -21,6 +21,7 @@ from openai import OpenAI
 
 from guardrail.classifier import classify_query
 from retrieval.vector_store import query as retrieve_chunks
+from temporal.conflict_detector import detect_conflicts
 
 load_dotenv()
 
@@ -93,12 +94,28 @@ def _format_sources(chunks: list[dict]) -> str:
     return "\n\n".join(blocks)
 
 
+def _format_conflicts_block(conflicts: list, index_by_chunk_id: dict[str, int]) -> str:
+    if not conflicts:
+        return ""
+    lines = [
+        "\nDetected potential temporal conflicts (verify and address explicitly — state "
+        "both dates and prefer the more recently modified source):"
+    ]
+    for c in conflicts:
+        n_a, n_b = index_by_chunk_id[c.chunk_id_a], index_by_chunk_id[c.chunk_id_b]
+        lines.append(
+            f"- [{n_a}] (last modified {c.date_a}) and [{n_b}] (last modified {c.date_b}) "
+            f"both address \"{c.section_heading_a}\" / \"{c.section_heading_b}\" — check whether they agree."
+        )
+    return "\n".join(lines)
+
+
 def answer_question(question: str, top_k: int = DEFAULT_TOP_K) -> dict:
     classification = classify_query(question)
     category = classification["category"]
 
     if category == "out_of_scope":
-        return {"answer": OUT_OF_SCOPE_ANSWER, "sources": [], "category": category}
+        return {"answer": OUT_OF_SCOPE_ANSWER, "sources": [], "category": category, "temporal_conflicts": []}
 
     chunks = retrieve_chunks(question, top_k=top_k)
     if not chunks:
@@ -106,13 +123,18 @@ def answer_question(question: str, top_k: int = DEFAULT_TOP_K) -> dict:
             "answer": "I don't have any indexed guidance to answer that.",
             "sources": [],
             "category": category,
+            "temporal_conflicts": [],
         }
+
+    index_by_chunk_id = {c["chunk_id"]: i for i, c in enumerate(chunks, start=1)}
+    conflicts = detect_conflicts(chunks)
 
     system_prompt = (
         INDIVIDUALIZED_ADVICE_SYSTEM_PROMPT if category == "individualized_advice" else FACTUAL_SYSTEM_PROMPT
     )
     user_message = (
-        f"Sources:\n\n{_format_sources(chunks)}\n\n"
+        f"Sources:\n\n{_format_sources(chunks)}\n"
+        f"{_format_conflicts_block(conflicts, index_by_chunk_id)}\n\n"
         f"Question: {question}\n\n"
         "Answer the question using only the sources above, with inline [n] citations."
     )
@@ -139,6 +161,17 @@ def answer_question(question: str, top_k: int = DEFAULT_TOP_K) -> dict:
                 "date_last_modified": c["date_last_modified"],
             }
             for i, c in enumerate(chunks, start=1)
+        ],
+        "temporal_conflicts": [
+            {
+                "source_n_a": index_by_chunk_id[c.chunk_id_a],
+                "source_n_b": index_by_chunk_id[c.chunk_id_b],
+                "date_a": c.date_a,
+                "date_b": c.date_b,
+                "url_a": c.source_url_a,
+                "url_b": c.source_url_b,
+            }
+            for c in conflicts
         ],
     }
 

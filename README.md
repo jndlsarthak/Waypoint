@@ -9,13 +9,34 @@ project spec, architecture, and guardrails.
 not immigration or legal advice.** It does not replace a licensed RCIC or
 immigration lawyer.
 
-## Status: Phase 3 (Guardrail / Scope Layer) complete
+## Status: Phase 4 (Temporal Handling) complete
 
 What works end-to-end right now: ask a question via `/query` (or
 `generation/generator.py` directly) and it's classified into one of three
-categories *before* retrieval or generation (CLAUDE.md §3.4), then answered
-accordingly with inline `[n]` citations and a dated source list.
+categories *before* retrieval or generation (CLAUDE.md §3.4), checked for
+cross-source temporal conflicts, then answered with inline `[n]` citations,
+a dated source list, and a structured `temporal_conflicts` field.
 
+- **Temporal-conflict detection** (`temporal/conflict_detector.py`): after
+  retrieval, checks every pair of retrieved chunks from *different* pages
+  whose `date_last_modified` differ and whose **leaf section heading**
+  matches (e.g. two pages both have a "How we define work" section) — if
+  their text isn't byte-identical, it's flagged as a potential conflict with
+  both dates, both URLs, and both headings. This is deliberately gated on the
+  heading match, not embedding similarity: bge-small scores unrelated
+  sections (e.g. on-campus vs off-campus hour limits) above a naive 0.80
+  cosine threshold just from shared domain vocabulary, which produced a flood
+  of false positives when tested — confirming, yet again, that this
+  embedding model doesn't discriminate finely in this corpus (see the Phase 2
+  note below). The heading match is also deliberately *exact-text* gated, not
+  a fuzzy similarity ratio: `SequenceMatcher` scores "20 hours" vs "24 hours"
+  as ~99% similar, which would silently swallow exactly the conflicts this
+  module exists to catch. Verified against a real identical-boilerplate pair
+  (correctly NOT flagged — same text, different page, different date, not a
+  disagreement) and a synthetic genuine conflict (correctly flagged). Flagged
+  conflicts are both injected into the generation prompt (explicit
+  instruction to address them) and returned as structured data in the API
+  response, independent of whether the model mentions them in prose.
 - **Guardrail classifier** (`guardrail/classifier.py`): a cheap Groq model
   (`openai/gpt-oss-20b`) classifies each question as `factual`,
   `individualized_advice`, or `out_of_scope` — run before any retrieval or
@@ -41,10 +62,22 @@ accordingly with inline `[n]` citations and a dated source list.
   `individualized_advice` questions) a hard rule against personal
   determinations.
 - **FastAPI**: `POST /query {"question": "...", "top_k": 5}` →
-  `{"answer", "sources", "category"}`.
+  `{"answer", "sources", "category", "temporal_conflicts"}`.
 
-Not built yet: temporal-conflict surfacing beyond what the prompt does ad hoc
-(Phase 4), reranking, and the eval harness (Phase 5).
+Not built yet: reranking and the eval harness (Phases 5–6).
+
+### Known quirk: CLI exit code on macOS
+
+Running `python -m generation.generator "..."` (or any one-shot script that
+calls the embedder) correctly computes and prints the answer, but the
+process can then exit with code 134 (SIGABRT) due to a native threading
+teardown crash (`recursive_mutex lock failed`) somewhere in the
+torch/tokenizers/Chroma dependency stack on this macOS setup — confirmed it
+happens *after* the correct output is printed, not during computation.
+Verified the actual `uvicorn` server (a long-running process that never hits
+this exit path between requests) stays stable across repeated `/query`
+calls, so this doesn't affect real usage — just don't rely on a one-shot
+script's exit code to mean "it failed."
 
 ### Known limitations (naive retrieval)
 
@@ -80,8 +113,7 @@ eval harness will want to measure.
   lookup table) are further split into embeddable-sized pieces rather than
   shipped as one giant chunk.
 
-Not built yet: temporal-conflict surfacing, reranking, and the eval harness
-(Phases 4–5).
+Not built yet: reranking and the eval harness (Phases 5–6).
 
 ## Project structure
 
@@ -97,8 +129,10 @@ IRCC_Rag/
 │   └── vector_store.py  # build_index() / query() against Chroma
 ├── guardrail/          # scope classifier, run before retrieval/generation
 │   └── classifier.py    # classify_query() -> factual / individualized_advice / out_of_scope
+├── temporal/            # cross-source temporal-conflict detection
+│   └── conflict_detector.py  # detect_conflicts() -> flag same-heading chunks with differing dates
 ├── generation/         # LLM answer generation with citations
-│   └── generator.py     # classify -> retrieval -> Groq call -> {answer, sources, category}
+│   └── generator.py     # classify -> retrieval -> conflict check -> Groq call -> {answer, sources, category, temporal_conflicts}
 ├── eval/               # (Phase 5+) golden Q&A set, scoring harness
 ├── frontend/           # (Phase 7) chat UI
 ├── data/
