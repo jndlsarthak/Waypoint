@@ -11,3 +11,12 @@ services:
         value: 3.13.0
       - key: GROQ_API_KEY
         sync: false
+      # Forces torch to use its baseline CPU kernel dispatch instead of
+      # auto-detecting AVX2/AVX512 support via CPUID — on some cloud VMs the
+      # hypervisor reports support for instructions it doesn't actually
+      # execute correctly, which crashes torch with SIGILL (exit 132) the
+      # moment it runs a vectorized op (hit this on Render's free tier).
+      - key: ATEN_CPU_CAPABILITY
+        value: default
+      - key: OMP_NUM_THREADS
+        value: "1"
