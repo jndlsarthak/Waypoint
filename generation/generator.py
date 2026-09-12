@@ -20,7 +20,8 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from guardrail.classifier import classify_query
-from retrieval.reranker import retrieve_and_rerank as retrieve_chunks
+from retrieval.reranker import retrieve_and_rerank
+from retrieval.vector_store import query as vector_search
 from temporal.conflict_detector import detect_conflicts
 
 load_dotenv()
@@ -28,6 +29,19 @@ load_dotenv()
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 GENERATION_MODEL = "openai/gpt-oss-120b"
 MAX_TOKENS = 2048
+
+# Reranking loads a second ONNX model (~140MB) on top of the embedding model
+# and bumps peak memory past 512MB — too much for Render's free tier
+# (measured ~508MB for embedding+rerank alone, before FastAPI/uvicorn/Groq
+# client overhead even loads). Off by default there; flip back on with an
+# env var once/if hosted with more headroom, no code change needed.
+ENABLE_RERANKING = os.environ.get("ENABLE_RERANKING", "true").lower() != "false"
+
+
+def retrieve_chunks(question: str, top_k: int = 5) -> list[dict]:
+    if ENABLE_RERANKING:
+        return retrieve_and_rerank(question, top_k=top_k)
+    return vector_search(question, top_k=top_k)
 DEFAULT_TOP_K = 5
 
 OUT_OF_SCOPE_ANSWER = (

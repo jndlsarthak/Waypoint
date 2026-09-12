@@ -24,20 +24,27 @@ models (diminishing returns for a portfolio project's iteration budget).
 
 from __future__ import annotations
 
-from sentence_transformers import CrossEncoder
+from fastembed.rerank.cross_encoder import TextCrossEncoder
 
 from retrieval.vector_store import query as vector_search
 
-RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+# ONNX Runtime build of the same model (via fastembed) instead of
+# sentence-transformers/torch — see embedder.py for why (Render OOM).
+RERANKER_MODEL_NAME = "Xenova/ms-marco-MiniLM-L-6-v2"
 DEFAULT_CANDIDATE_K = 30
 
-_model: CrossEncoder | None = None
+# Same batching issue as embedder.py's INDEX_BATCH_SIZE: the default batch
+# size processes all candidates as one padded ONNX batch, spiking memory —
+# worse here since cross-encoders run joint attention over query+doc pairs.
+RERANK_BATCH_SIZE = 1
+
+_model: TextCrossEncoder | None = None
 
 
-def _get_model() -> CrossEncoder:
+def _get_model() -> TextCrossEncoder:
     global _model
     if _model is None:
-        _model = CrossEncoder(RERANKER_MODEL_NAME)
+        _model = TextCrossEncoder(model_name=RERANKER_MODEL_NAME)
     return _model
 
 
@@ -46,8 +53,7 @@ def retrieve_and_rerank(question: str, top_k: int = 5, candidate_k: int = DEFAUL
     if not candidates:
         return []
 
-    pairs = [(question, c["text"]) for c in candidates]
-    scores = _get_model().predict(pairs)
+    scores = _get_model().rerank(question, [c["text"] for c in candidates], batch_size=RERANK_BATCH_SIZE)
 
     ranked = sorted(zip(candidates, scores), key=lambda pair: -pair[1])
     return [chunk for chunk, _ in ranked[:top_k]]

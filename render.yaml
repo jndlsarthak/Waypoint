@@ -17,17 +17,12 @@ services:
         value: 3.12.8
       - key: GROQ_API_KEY
         sync: false
-      # Forces torch to use its baseline CPU kernel dispatch instead of
-      # auto-detecting AVX2/AVX512 support via CPUID — on some cloud VMs the
-      # hypervisor reports support for instructions it doesn't actually
-      # execute correctly, which crashes torch with SIGILL (exit 132) the
-      # moment it runs a vectorized op (hit this on Render's free tier).
-      - key: ATEN_CPU_CAPABILITY
-        value: default
-      - key: OMP_NUM_THREADS
-        value: "1"
-      # The ATEN_CPU_CAPABILITY workaround above didn't fix the SIGILL, so
-      # get an actual crash location instead of guessing further: Python's
-      # faulthandler catches SIGILL too and prints a real stack trace.
+      # Kept for future diagnostics — prints a real stack trace on fatal
+      # signals (SIGILL, SIGSEGV, etc.) instead of a silent crash.
       - key: PYTHONFAULTHANDLER
         value: "1"
+      # Free tier is 512MB RAM; embedding + reranking together measured
+      # ~508MB before FastAPI/uvicorn even load. Set to "true" if this ever
+      # moves to a plan with more memory.
+      - key: ENABLE_RERANKING
+        value: "false"
