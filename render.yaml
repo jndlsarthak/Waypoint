@@ -20,3 +20,8 @@ services:
         value: default
       - key: OMP_NUM_THREADS
         value: "1"
+      # The ATEN_CPU_CAPABILITY workaround above didn't fix the SIGILL, so
+      # get an actual crash location instead of guessing further: Python's
+      # faulthandler catches SIGILL too and prints a real stack trace.
+      - key: PYTHONFAULTHANDLER
+        value: "1"
