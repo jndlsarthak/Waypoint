@@ -9,7 +9,11 @@ project spec, architecture, and guardrails.
 not immigration or legal advice.** It does not replace a licensed RCIC or
 immigration lawyer.
 
-## Status: Phase 7 (Deploy + polish — frontend) in progress
+**Live demo:** https://waypoint-guidance.vercel.app
+(backend: [Render](https://waypoint-api-m2u6.onrender.com), free tier —
+reranking is disabled there for memory, see "Known limitations" below)
+
+## Status: Phase 7 (Deploy + polish) complete
 
 What works end-to-end right now: ask a question via the [frontend](frontend/)
 chat UI (or `POST /query` directly, or `generation/generator.py`) and it's
@@ -126,7 +130,16 @@ everything above currently runs locally.
 - **FastAPI**: `POST /query {"question": "...", "top_k": 5}` →
   `{"answer", "sources", "category", "temporal_conflicts"}`.
 
-Not built yet: an actual deployed link (Vercel + Render/Railway).
+Deployed: frontend on Vercel (https://waypoint-guidance.vercel.app), backend
+on Render's free tier (https://waypoint-api-m2u6.onrender.com). Getting the
+backend running there surfaced (and fixed) real issues: a SIGILL crash from
+compiling `chroma-hnswlib` from source on Python 3.13 (fixed by pinning
+3.12, which has a prebuilt wheel), an OOM from torch's stack plus a
+fastembed default-batch-size bug that spiked RSS to ~3.7GB for 224 chunks
+(fixed by switching to fastembed/ONNX and setting a small batch size), and a
+deploy timeout from embedding those chunks on Render's 0.1-CPU free tier at
+every cold start (fixed by precomputing embeddings locally and committing
+them — see `retrieval/vector_store.py`'s `precompute_embeddings()`).
 
 ### Known quirk: CLI exit code on macOS
 
@@ -142,6 +155,15 @@ calls, so this doesn't affect real usage — just don't rely on a one-shot
 script's exit code to mean "it failed."
 
 ### Known limitations (naive retrieval)
+
+**Reranking is disabled on the deployed backend** (`ENABLE_RERANKING=false`
+in `render.yaml`) — Render's free tier is 512MB RAM, and loading both the
+embedding model and the cross-encoder reranker measured ~508MB before
+FastAPI/uvicorn/the Groq client even load. Locally, or on a host with more
+memory, set `ENABLE_RERANKING=true` (the default in `generation/generator.py`
+when unset) to get reranked retrieval. This means the deployed demo has the
+naive-retrieval weakness described below in full, not just on the one
+adversarial example.
 
 Diagnosed while testing: on some direct factual questions (e.g. "What are the
 eligibility requirements for a study permit?"), the exact matching chunk can
