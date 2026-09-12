@@ -7,8 +7,14 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      # 3.12, not 3.13: chroma-hnswlib only ships prebuilt manylinux wheels
+      # through cp312. With no cp313 wheel, pip compiles it from source on
+      # Render's build machine, which crashed with SIGILL (exit 132) at
+      # import time — almost certainly build-machine-specific CPU
+      # instructions (e.g. -march=native) baked into that one-off build,
+      # unlike the portable prebuilt wheels for 3.9-3.12.
       - key: PYTHON_VERSION
-        value: 3.13.0
+        value: 3.12.8
       - key: GROQ_API_KEY
         sync: false
       # Forces torch to use its baseline CPU kernel dispatch instead of
