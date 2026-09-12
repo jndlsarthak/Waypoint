@@ -9,10 +9,50 @@ project spec, architecture, and guardrails.
 not immigration or legal advice.** It does not replace a licensed RCIC or
 immigration lawyer.
 
-## Status: Phase 1 (Data Pipeline) complete
+## Status: Phase 2 (Basic RAG) complete
 
-What works end-to-end right now: point the ingestion module at a list of
-canada.ca URLs and get back clean, dated, tagged chunks ready for embedding.
+What works end-to-end right now: ask a question via `/query` (or
+`generation/generator.py` directly) and get back an answer with inline `[n]`
+citations and a dated source list, grounded in the Phase 1 chunk corpus.
+
+- **Embeddings**: `BAAI/bge-small-en-v1.5` via `sentence-transformers` — local,
+  free, no API key.
+- **Vector store**: Chroma, persisted to `data/chroma/` (gitignored, rebuild
+  with `python -m retrieval.vector_store`). Two hub/overview pages
+  (`study-canada-overview`, `work-while-studying-overview`) are excluded from
+  the index — see "Known limitations" below.
+- **Retrieval**: naive top-k cosine similarity, no reranking yet (per
+  CLAUDE.md §3.3/§6, reranking is a Phase 6 iteration on top of this baseline).
+- **Generation**: Groq (`openai/gpt-oss-120b`, OpenAI-compatible API) with a
+  system prompt enforcing inline `[n]` citations, a "Sources" footer with
+  per-source last-modified dates, explicit conflict-flagging when sources
+  disagree, and a refusal to answer beyond what the retrieved sources support.
+- **FastAPI**: `POST /query {"question": "...", "top_k": 5}` → `{"answer", "sources"}`.
+
+Not built yet: the guardrail/scope classifier (Phase 3), temporal-conflict
+surfacing beyond what the prompt does ad hoc (Phase 4), reranking, and the eval
+harness (Phase 5).
+
+### Known limitations (naive retrieval)
+
+Diagnosed while testing: on some direct factual questions (e.g. "What are the
+eligibility requirements for a study permit?"), the exact matching chunk can
+rank far down (~80th of 224) because bge-small-en-v1.5 clusters this corpus's
+jargon-heavy, topically-narrow text together — chunks about fees, application
+steps, and eligibility all score similarly against a generic query. Swapping
+to `bge-base-en-v1.5` did not meaningfully fix this, confirming it's the
+embedding-similarity weakness CLAUDE.md §3.3 names directly ("naive top-k
+similarity search is the most common source of bad RAG answers") and plans to
+address with reranking in Phase 6, not a bug in this implementation.
+
+Reassuringly, when retrieval misses the right chunk, generation does not
+hallucinate a plausible-sounding number to fill the gap — tested with a
+language-requirement question where the retrieved chunks didn't include the
+actual CLB score, and the model correctly said the sources didn't specify it
+rather than guessing. That's the hallucination-avoidance behavior Phase 5's
+eval harness will want to measure.
+
+### Phase 1 (Data Pipeline) details
 
 - **Ingestion** (`ingestion/`) fetches 10 official canada.ca pages covering
   study permit eligibility, PGWP eligibility, and work-while-studying rules.
@@ -26,11 +66,9 @@ canada.ca URLs and get back clean, dated, tagged chunks ready for embedding.
   Oversized sections with no internal subheadings (e.g. a long eligibility
   lookup table) are further split into embeddable-sized pieces rather than
   shipped as one giant chunk.
-- **FastAPI skeleton** (`main.py`) — just a `/health` endpoint for now.
-  Retrieval/generation endpoints land in later phases.
 
-Not built yet: embeddings, vector store, retrieval, reranking, the
-guardrail/scope classifier, generation, and the eval harness (Phases 2–5).
+Not built yet: the guardrail/scope classifier, temporal-conflict surfacing,
+reranking, and the eval harness (Phases 3–5).
 
 ## Project structure
 
@@ -41,19 +79,24 @@ IRCC_Rag/
 │   └── scraper.py       # fetcher: robots.txt check, rate limiting, HTML->markdown
 ├── chunking/           # split normalized markdown into cited, tagged chunks
 │   └── chunker.py
-├── retrieval/          # (Phase 3+) embeddings, vector store, reranking
-├── generation/         # (Phase 3+) LLM answer generation with citations
+├── retrieval/          # embeddings + Chroma vector store + naive top-k retrieval
+│   ├── embedder.py      # bge-small-en-v1.5 wrapper (query vs. passage encoding)
+│   └── vector_store.py  # build_index() / query() against Chroma
+├── generation/         # LLM answer generation with citations
+│   └── generator.py     # retrieval -> Groq call -> {answer, sources}
 ├── eval/               # (Phase 5+) golden Q&A set, scoring harness
 ├── frontend/           # (Phase 7) chat UI
 ├── data/
 │   ├── raw_html/       # one .html per page
 │   ├── normalized_md/  # one .md per page
 │   ├── manifest.json   # page-level metadata for all ingested pages
-│   └── chunks/
-│       ├── <slug>.json       # chunks for one page
-│       └── all_chunks.jsonl  # all chunks, one JSON object per line
-├── main.py             # FastAPI app (health check only for now)
+│   ├── chunks/
+│   │   ├── <slug>.json       # chunks for one page
+│   │   └── all_chunks.jsonl  # all chunks, one JSON object per line
+│   └── chroma/          # Chroma's persisted index (gitignored, rebuildable)
+├── main.py             # FastAPI app: /health, /query
 ├── requirements.txt
+├── .env.example        # copy to .env and fill in GROQ_API_KEY
 └── CLAUDE.md           # full project spec
 ```
 
@@ -88,11 +131,23 @@ python -m ingestion.scraper
 # Chunk pages -> data/chunks/<slug>.json, data/chunks/all_chunks.jsonl
 python -m chunking.chunker
 
-# (optional) run the FastAPI skeleton
+# Build the vector index -> data/chroma/ (224 of 253 chunks; see "Known limitations")
+python -m retrieval.vector_store
+
+# Add your Groq API key (free tier, groq.com) — never commit this file
+cp .env.example .env && edit .env
+
+# Ask a question directly
+python -m generation.generator "How many hours can I work off campus while studying?"
+
+# Or run the API and POST to /query
 uvicorn main:app --reload
+curl -X POST http://127.0.0.1:8000/query -H "Content-Type: application/json" \
+  -d '{"question": "How many hours can I work off campus while studying?"}'
 ```
 
-Current output: 10 pages ingested, 253 chunks written to `data/chunks/`.
+Current output: 10 pages ingested, 253 chunks written to `data/chunks/`, 224
+indexed for retrieval.
 
 ## Chunk shape
 
@@ -115,11 +170,14 @@ Each entry in `data/chunks/all_chunks.jsonl` looks like:
 which canada.ca keeps accurate — this is the field Phase 4's temporal-conflict
 detection will key off of.
 
-## Known limitations (deferred to later phases)
+## Other known limitations (deferred to later phases)
 
-- No embeddings/vector store yet — chunks are just JSON on disk.
 - The oversized-table split (`chunking/chunker.py`, `MAX_CHUNK_CHARS`) is a
   generic safety net (row-batch tables, paragraph-split prose), not tuned
   against retrieval quality — that tuning belongs in Phase 6 (iterate on eval
   failures).
 - Only English pages are ingested.
+- No scope/guardrail classifier yet (Phase 3) — `/query` will attempt to
+  answer individualized-advice or out-of-scope questions rather than
+  deflecting them.
+- See the naive-retrieval limitation documented above under Phase 2.

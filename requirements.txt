@@ -3,3 +3,9 @@ beautifulsoup4>=4.12,<5
 markdownify>=0.13,<1
 fastapi>=0.110,<1
 uvicorn[standard]>=0.29,<1
+
+# Phase 2: retrieval + generation
+sentence-transformers>=3.0,<4
+chromadb>=0.5,<1
+openai>=1.40,<2
+python-dotenv>=1.0,<2
