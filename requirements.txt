@@ -1,0 +1,5 @@
+requests>=2.31,<3
+beautifulsoup4>=4.12,<5
+markdownify>=0.13,<1
+fastapi>=0.110,<1
+uvicorn[standard]>=0.29,<1
