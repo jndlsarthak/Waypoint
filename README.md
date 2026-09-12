@@ -9,13 +9,34 @@ project spec, architecture, and guardrails.
 not immigration or legal advice.** It does not replace a licensed RCIC or
 immigration lawyer.
 
-## Status: Phase 4 (Temporal Handling) complete
+## Status: Phase 5 (Eval Harness) complete
 
 What works end-to-end right now: ask a question via `/query` (or
 `generation/generator.py` directly) and it's classified into one of three
 categories *before* retrieval or generation (CLAUDE.md §3.4), checked for
 cross-source temporal conflicts, then answered with inline `[n]` citations,
-a dated source list, and a structured `temporal_conflicts` field.
+a dated source list, and a structured `temporal_conflicts` field. There's now
+also a golden Q&A set and eval script to score all of that quantitatively.
+
+- **Eval harness** (`eval/`): `golden_set.json` has 22 hand-written questions
+  spanning all three guardrail categories (10 factual, 6 individualized-advice,
+  6 out-of-scope). `run_eval.py` runs each through the full pipeline and scores
+  four deterministic metrics (no extra LLM-as-judge calls, to keep this free
+  and fast):
+  - **Scope-handling accuracy** — classified category vs. expected: **22/22 (100%)**
+  - **Citation validity** — every `[n]` marker in an answer points at an
+    actually-returned source, i.e. zero hallucinated source numbers: **13/13 (100%)**
+    of answers that cited anything
+  - **Individualized-advice redirect rate** — answer actually contains the
+    required RCIC/immigration-lawyer language: **6/6 (100%)**
+  - **Out-of-scope clean decline** — zero sources returned (i.e. generation
+    was actually skipped, not just declined in prose): **6/6 (100%)**
+
+  This intentionally does *not* score "does the cited chunk really support
+  the claim" (CLAUDE.md's citation-accuracy metric) or hallucination rate via
+  LLM-as-judge — both need a second model call per answer, which is a
+  reasonable Phase 6 addition once there's a specific failure mode worth
+  spending that on. Results land in `eval/results.json` per run.
 
 - **Temporal-conflict detection** (`temporal/conflict_detector.py`): after
   retrieval, checks every pair of retrieved chunks from *different* pages
@@ -64,7 +85,8 @@ a dated source list, and a structured `temporal_conflicts` field.
 - **FastAPI**: `POST /query {"question": "...", "top_k": 5}` →
   `{"answer", "sources", "category", "temporal_conflicts"}`.
 
-Not built yet: reranking and the eval harness (Phases 5–6).
+Not built yet: reranking / prompt iteration driven by eval failures (Phase 6),
+and deployment (Phase 7).
 
 ### Known quirk: CLI exit code on macOS
 
@@ -113,8 +135,6 @@ eval harness will want to measure.
   lookup table) are further split into embeddable-sized pieces rather than
   shipped as one giant chunk.
 
-Not built yet: reranking and the eval harness (Phases 5–6).
-
 ## Project structure
 
 ```
@@ -133,7 +153,10 @@ IRCC_Rag/
 │   └── conflict_detector.py  # detect_conflicts() -> flag same-heading chunks with differing dates
 ├── generation/         # LLM answer generation with citations
 │   └── generator.py     # classify -> retrieval -> conflict check -> Groq call -> {answer, sources, category, temporal_conflicts}
-├── eval/               # (Phase 5+) golden Q&A set, scoring harness
+├── eval/               # golden Q&A set + scoring harness
+│   ├── golden_set.json  # 22 Q&A pairs across factual/individualized/out-of-scope
+│   ├── run_eval.py      # runs the golden set through the pipeline, scores it
+│   └── results.json     # latest run's per-question results (generated)
 ├── frontend/           # (Phase 7) chat UI
 ├── data/
 │   ├── raw_html/       # one .html per page
@@ -193,6 +216,9 @@ python -m generation.generator "How many hours can I work off campus while study
 uvicorn main:app --reload
 curl -X POST http://127.0.0.1:8000/query -H "Content-Type: application/json" \
   -d '{"question": "How many hours can I work off campus while studying?"}'
+
+# Run the eval harness against the golden Q&A set -> eval/results.json
+python -m eval.run_eval
 ```
 
 Current output: 10 pages ingested, 253 chunks written to `data/chunks/`, 224
