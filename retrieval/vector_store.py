@@ -14,6 +14,7 @@ from retrieval.embedder import embed_passages, embed_query
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 CHUNKS_PATH = DATA_DIR / "chunks" / "all_chunks.jsonl"
+EMBEDDINGS_PATH = DATA_DIR / "chunk_embeddings.json"
 CHROMA_DIR = DATA_DIR / "chroma"
 COLLECTION_NAME = "ircc_guidance_chunks"
 
@@ -66,8 +67,34 @@ def _from_chroma_metadata(metadata: dict) -> dict:
     }
 
 
+def _load_precomputed_embeddings() -> dict[str, list[float]] | None:
+    if not EMBEDDINGS_PATH.exists():
+        return None
+    return json.loads(EMBEDDINGS_PATH.read_text(encoding="utf-8"))
+
+
+def precompute_embeddings() -> int:
+    """Computes and saves embeddings for all indexed chunks to disk.
+
+    Run this locally (fast, full CPU) whenever data/chunks/ changes; the
+    committed output lets build_index() skip running the embedding model at
+    all on deploy — Render's free tier (0.1 CPU) took over 5 minutes to
+    embed 224 chunks at startup and never finished before the platform's
+    port-scan timeout killed the deploy.
+    """
+    chunks = _load_chunks()
+    embeddings = embed_passages([c["text"] for c in chunks])
+    payload = {c["chunk_id"]: e for c, e in zip(chunks, embeddings)}
+    EMBEDDINGS_PATH.write_text(json.dumps(payload), encoding="utf-8")
+    return len(chunks)
+
+
 def build_index() -> int:
-    """(Re)builds the collection from data/chunks/all_chunks.jsonl."""
+    """(Re)builds the collection from data/chunks/all_chunks.jsonl.
+
+    Uses precomputed embeddings (data/chunk_embeddings.json) when available
+    instead of running the embedding model — see precompute_embeddings().
+    """
     chunks = _load_chunks()
 
     client = _get_client()
@@ -76,8 +103,13 @@ def build_index() -> int:
 
     ids = [c["chunk_id"] for c in chunks]
     texts = [c["text"] for c in chunks]
-    embeddings = embed_passages(texts)
     metadatas = [_to_chroma_metadata(c) for c in chunks]
+
+    precomputed = _load_precomputed_embeddings()
+    if precomputed and all(cid in precomputed for cid in ids):
+        embeddings = [precomputed[cid] for cid in ids]
+    else:
+        embeddings = embed_passages(texts)
 
     collection.add(ids=ids, embeddings=embeddings, documents=texts, metadatas=metadatas)
     return len(chunks)
@@ -114,5 +146,11 @@ def query(question: str, top_k: int = 5) -> list[dict]:
 
 
 if __name__ == "__main__":
-    n = build_index()
-    print(f"Indexed {n} chunks into Chroma at {CHROMA_DIR}")
+    import sys
+
+    if "--precompute" in sys.argv:
+        n = precompute_embeddings()
+        print(f"Precomputed embeddings for {n} chunks -> {EMBEDDINGS_PATH}")
+    else:
+        n = build_index()
+        print(f"Indexed {n} chunks into Chroma at {CHROMA_DIR}")
