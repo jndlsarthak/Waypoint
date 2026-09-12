@@ -265,6 +265,33 @@ python -m eval.run_eval
 Current output: 10 pages ingested, 253 chunks written to `data/chunks/`, 224
 indexed for retrieval.
 
+## Deploying
+
+Backend on **Render**, frontend on **Vercel** — matching CLAUDE.md's
+suggested stack. The vector index isn't committed to git (it's derived,
+gitignored); the backend rebuilds it automatically on startup if missing
+(`retrieval.vector_store.ensure_index()`, wired into `main.py`'s FastAPI
+`lifespan`), so this works even on hosts with an ephemeral filesystem
+between restarts (e.g. Render's free tier).
+
+**Backend (Render):**
+1. Render dashboard → New → Blueprint → connect the `Waypoint` GitHub repo.
+   Render reads [render.yaml](render.yaml) (build: `pip install -r
+   requirements.txt`; start: `uvicorn main:app --host 0.0.0.0 --port $PORT`).
+2. Set the `GROQ_API_KEY` secret in the Render dashboard when prompted
+   (`render.yaml` marks it `sync: false` deliberately — it's never in git).
+3. Note the resulting service URL (`https://<name>.onrender.com`) — the
+   frontend needs it next.
+
+**Frontend (Vercel):**
+1. In `frontend/`, set the Vercel project's Root Directory to `frontend`
+   (this is a monorepo — the Next.js app isn't at the repo root).
+2. Set the `NEXT_PUBLIC_API_BASE_URL` environment variable to the Render URL
+   from above.
+3. Deploy. `main.py`'s CORS config already allows any `*.vercel.app` origin
+   (production and preview deployments both), so no backend redeploy is
+   needed once the frontend URL is known.
+
 ## Chunk shape
 
 Each entry in `data/chunks/all_chunks.jsonl` looks like:

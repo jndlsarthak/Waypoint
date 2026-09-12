@@ -83,6 +83,21 @@ def build_index() -> int:
     return len(chunks)
 
 
+def ensure_index() -> int:
+    """Builds the index only if it doesn't already exist and isn't empty.
+
+    Safe (and cheap) to call on every app startup — some hosts (e.g. Render's
+    free tier) reset the container's disk between restarts, so the index
+    can't be assumed to survive from a one-time build step at deploy time.
+    """
+    client = _get_client()
+    if COLLECTION_NAME in {c.name for c in client.list_collections()}:
+        collection = client.get_collection(COLLECTION_NAME)
+        if collection.count() > 0:
+            return collection.count()
+    return build_index()
+
+
 def query(question: str, top_k: int = 5) -> list[dict]:
     collection = _get_client().get_collection(COLLECTION_NAME)
     query_embedding = embed_query(question)

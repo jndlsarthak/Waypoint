@@ -3,7 +3,7 @@ import { DisclaimerBar } from "@/components/DisclaimerBar";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { Hero } from "@/components/Hero";
-import { StatsStrip } from "@/components/StatsStrip";
+import { TopicsStrip } from "@/components/TopicsStrip";
 
 export default function Home() {
   return (
@@ -12,7 +12,7 @@ export default function Home() {
       <DisclaimerBar />
       <main className="flex-1">
         <Hero />
-        <StatsStrip />
+        <TopicsStrip />
         <ChatPanel />
       </main>
       <Footer />
