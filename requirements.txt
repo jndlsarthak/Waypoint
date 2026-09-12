@@ -4,6 +4,17 @@ markdownify>=0.13,<1
 fastapi>=0.110,<1
 uvicorn[standard]>=0.29,<1
 
+# CPU-only torch build on Linux — the default PyPI wheel there bundles
+# CUDA/NVIDIA dependencies (triton, nvidia-cublas, nvidia-cudnn, etc.) that
+# are not just dead weight on a CPU-only host, they can crash with SIGILL
+# (exit 132) on some cloud VMs (hit this deploying to Render). macOS has no
+# CUDA-bundled torch to begin with (no +cpu-suffixed build exists there),
+# hence the platform markers. Must appear before sentence-transformers so
+# pip resolves torch from here first.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.6.0+cpu; sys_platform == "linux"
+torch>=2.2,<3; sys_platform != "linux"
+
 # Phase 2: retrieval + generation
 sentence-transformers>=3.0,<4
 chromadb>=0.5,<1
