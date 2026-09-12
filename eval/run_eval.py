@@ -22,8 +22,10 @@ from __future__ import annotations
 
 import json
 import re
-import sys
+import time
 from pathlib import Path
+
+from openai import RateLimitError
 
 from generation.generator import answer_question
 
@@ -33,9 +35,27 @@ RESULTS_PATH = Path(__file__).resolve().parent / "results.json"
 CITATION_RE = re.compile(r"\[(\d+)\]")
 REDIRECT_RE = re.compile(r"\bRCIC\b|immigration lawyer", re.IGNORECASE)
 
+# Groq's free tier has a tokens-per-minute cap; a full golden-set run can get
+# close to it. Pace requests and retry with backoff rather than failing the
+# whole run partway through.
+PACING_SECONDS = 3
+RATE_LIMIT_RETRIES = 3
+RATE_LIMIT_BACKOFF_SECONDS = 12
+
 
 def _citation_numbers(text: str) -> list[int]:
     return [int(n) for n in CITATION_RE.findall(text)]
+
+
+def _answer_with_retry(question: str) -> dict:
+    for attempt in range(RATE_LIMIT_RETRIES):
+        try:
+            return answer_question(question)
+        except RateLimitError:
+            if attempt == RATE_LIMIT_RETRIES - 1:
+                raise
+            print(f"  rate limited, backing off {RATE_LIMIT_BACKOFF_SECONDS}s...")
+            time.sleep(RATE_LIMIT_BACKOFF_SECONDS)
 
 
 def run_eval() -> list[dict]:
@@ -43,7 +63,8 @@ def run_eval() -> list[dict]:
     results = []
 
     for item in golden_set:
-        result = answer_question(item["question"])
+        result = _answer_with_retry(item["question"])
+        time.sleep(PACING_SECONDS)
         category = result["category"]
         answer = result["answer"]
         n_sources = len(result["sources"])

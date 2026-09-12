@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from guardrail.classifier import classify_query
-from retrieval.vector_store import query as retrieve_chunks
+from retrieval.reranker import retrieve_and_rerank as retrieve_chunks
 from temporal.conflict_detector import detect_conflicts
 
 load_dotenv()

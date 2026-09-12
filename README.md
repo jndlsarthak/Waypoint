@@ -9,15 +9,38 @@ project spec, architecture, and guardrails.
 not immigration or legal advice.** It does not replace a licensed RCIC or
 immigration lawyer.
 
-## Status: Phase 5 (Eval Harness) complete
+## Status: Phase 6 (Iterate — reranking) complete
 
 What works end-to-end right now: ask a question via `/query` (or
 `generation/generator.py` directly) and it's classified into one of three
-categories *before* retrieval or generation (CLAUDE.md §3.4), checked for
-cross-source temporal conflicts, then answered with inline `[n]` citations,
-a dated source list, and a structured `temporal_conflicts` field. There's now
-also a golden Q&A set and eval script to score all of that quantitatively.
+categories *before* retrieval or generation (CLAUDE.md §3.4), retrieved via
+embeddings + cross-encoder reranking, checked for cross-source temporal
+conflicts, then answered with inline `[n]` citations, a dated source list,
+and a structured `temporal_conflicts` field.
 
+- **Reranking** (`retrieval/reranker.py`): CLAUDE.md §3.3's recommended fix
+  for the naive-retrieval weakness diagnosed in Phase 2 — pulls a 30-chunk
+  candidate pool from the embedding-based vector store, then rescores each
+  candidate against the query with a cross-encoder
+  (`cross-encoder/ms-marco-MiniLM-L-6-v2`, already bundled with
+  `sentence-transformers`, no new dependency) before generation sees the
+  top 5. Re-ran the full eval set with reranking wired in: **still 22/22,
+  13/13, 6/6, 6/6** — no regression.
+  Honestly, reranking did *not* fix the single hardest case originally
+  diagnosed ("What are the eligibility requirements for a study permit?"):
+  both the L-6 and L-12 cross-encoders still score a PGWP-overview chunk
+  that repeats the literal phrase "eligibility requirements" three times far
+  higher (+7.9) than the actually-correct study-permit chunk (-2.0), which
+  never uses that exact phrase. That's a genuine lexical-overlap trap, not a
+  candidate-recall problem (confirmed by reranking the *entire* 224-chunk
+  corpus with no improvement) — documented rather than chased further with
+  bigger models, given diminishing returns for a portfolio project's
+  iteration budget. Reranking is still worth keeping: it's the standard,
+  spec-recommended fix for the *general* weak-discrimination problem, even
+  though this specific adversarial query needs something else (e.g.
+  metadata/topic-tag boosting, hybrid lexical+embedding search) to fix — a
+  candidate for further iteration if this ever becomes a real failure mode
+  in a larger golden set.
 - **Eval harness** (`eval/`): `golden_set.json` has 22 hand-written questions
   spanning all three guardrail categories (10 factual, 6 individualized-advice,
   6 out-of-scope). `run_eval.py` runs each through the full pipeline and scores
@@ -85,8 +108,7 @@ also a golden Q&A set and eval script to score all of that quantitatively.
 - **FastAPI**: `POST /query {"question": "...", "top_k": 5}` →
   `{"answer", "sources", "category", "temporal_conflicts"}`.
 
-Not built yet: reranking / prompt iteration driven by eval failures (Phase 6),
-and deployment (Phase 7).
+Not built yet: deployment (Phase 7).
 
 ### Known quirk: CLI exit code on macOS
 
@@ -144,9 +166,10 @@ IRCC_Rag/
 │   └── scraper.py       # fetcher: robots.txt check, rate limiting, HTML->markdown
 ├── chunking/           # split normalized markdown into cited, tagged chunks
 │   └── chunker.py
-├── retrieval/          # embeddings + Chroma vector store + naive top-k retrieval
+├── retrieval/          # embeddings + Chroma vector store + reranked retrieval
 │   ├── embedder.py      # bge-small-en-v1.5 wrapper (query vs. passage encoding)
-│   └── vector_store.py  # build_index() / query() against Chroma
+│   ├── vector_store.py  # build_index() / query() against Chroma
+│   └── reranker.py      # retrieve_and_rerank() -> cross-encoder rescoring of candidates
 ├── guardrail/          # scope classifier, run before retrieval/generation
 │   └── classifier.py    # classify_query() -> factual / individualized_advice / out_of_scope
 ├── temporal/            # cross-source temporal-conflict detection

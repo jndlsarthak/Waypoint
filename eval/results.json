@@ -6,7 +6,7 @@
     "got_category": "factual",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 5,
+    "n_citations": 6,
     "citation_validity": true,
     "has_redirect_language": null,
     "n_temporal_conflicts": 0
@@ -18,7 +18,7 @@
     "got_category": "factual",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 4,
+    "n_citations": 1,
     "citation_validity": true,
     "has_redirect_language": null,
     "n_temporal_conflicts": 0
@@ -30,10 +30,10 @@
     "got_category": "factual",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 4,
+    "n_citations": 1,
     "citation_validity": true,
     "has_redirect_language": null,
-    "n_temporal_conflicts": 0
+    "n_temporal_conflicts": 1
   },
   {
     "id": "f4",
@@ -42,8 +42,8 @@
     "got_category": "factual",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 0,
-    "citation_validity": null,
+    "n_citations": 3,
+    "citation_validity": true,
     "has_redirect_language": null,
     "n_temporal_conflicts": 0
   },
@@ -54,10 +54,10 @@
     "got_category": "factual",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 2,
+    "n_citations": 5,
     "citation_validity": true,
     "has_redirect_language": null,
-    "n_temporal_conflicts": 0
+    "n_temporal_conflicts": 1
   },
   {
     "id": "f6",
@@ -66,8 +66,8 @@
     "got_category": "factual",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 0,
-    "citation_validity": null,
+    "n_citations": 2,
+    "citation_validity": true,
     "has_redirect_language": null,
     "n_temporal_conflicts": 0
   },
@@ -78,7 +78,7 @@
     "got_category": "factual",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 6,
+    "n_citations": 10,
     "citation_validity": true,
     "has_redirect_language": null,
     "n_temporal_conflicts": 0
@@ -90,8 +90,8 @@
     "got_category": "factual",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 2,
-    "citation_validity": true,
+    "n_citations": 0,
+    "citation_validity": null,
     "has_redirect_language": null,
     "n_temporal_conflicts": 0
   },
@@ -126,7 +126,7 @@
     "got_category": "individualized_advice",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 5,
+    "n_citations": 2,
     "citation_validity": true,
     "has_redirect_language": true,
     "n_temporal_conflicts": 0
@@ -138,7 +138,7 @@
     "got_category": "individualized_advice",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 11,
+    "n_citations": 12,
     "citation_validity": true,
     "has_redirect_language": true,
     "n_temporal_conflicts": 0
@@ -150,8 +150,8 @@
     "got_category": "individualized_advice",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 6,
-    "citation_validity": true,
+    "n_citations": 0,
+    "citation_validity": null,
     "has_redirect_language": true,
     "n_temporal_conflicts": 0
   },
@@ -162,7 +162,7 @@
     "got_category": "individualized_advice",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 15,
+    "n_citations": 16,
     "citation_validity": true,
     "has_redirect_language": true,
     "n_temporal_conflicts": 0
@@ -174,7 +174,7 @@
     "got_category": "individualized_advice",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 11,
+    "n_citations": 7,
     "citation_validity": true,
     "has_redirect_language": true,
     "n_temporal_conflicts": 0
@@ -186,7 +186,7 @@
     "got_category": "individualized_advice",
     "category_correct": true,
     "n_sources": 5,
-    "n_citations": 3,
+    "n_citations": 1,
     "citation_validity": true,
     "has_redirect_language": true,
     "n_temporal_conflicts": 0
