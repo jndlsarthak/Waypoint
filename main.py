@@ -1,9 +1,9 @@
 """FastAPI application entrypoint.
 
-Phase 2: naive retrieval + generation with citations. The scope/guardrail
-classifier (CLAUDE.md §3.4) is Phase 3 and is not wired in yet — /query will
-answer any question the retriever finds chunks for, including ones that
-should eventually be deflected to an RCIC/lawyer or declined as out of scope.
+/query runs the scope/guardrail classifier (CLAUDE.md §3.4) before retrieval
+or generation, then answers with citations (§3.5). The response includes
+which category ("factual" / "individualized_advice" / "out_of_scope") the
+question was classified as.
 """
 
 from fastapi import FastAPI

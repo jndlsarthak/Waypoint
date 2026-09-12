@@ -1,9 +1,14 @@
 """Generates an answer with inline citations from retrieved chunks, using Groq
-(free-tier hosting of open-weight models, e.g. Llama) via its OpenAI-compatible API.
+(free-tier hosting of open-weight models) via its OpenAI-compatible API.
 
-Phase 2 scope only: naive top-k retrieval + generation with citations (CLAUDE.md
-§3.5). The scope/guardrail classifier (§3.4 — declining individualized-advice
-and out-of-scope questions) is Phase 3 and is NOT implemented here yet.
+Runs the scope/guardrail classifier (CLAUDE.md §3.4, guardrail/classifier.py)
+before doing anything else:
+- "out_of_scope" questions are declined immediately — no retrieval, no
+  generation call.
+- "individualized_advice" questions still get retrieval + generation, but
+  with a system prompt that forbids a definitive personal determination and
+  requires an explicit RCIC/lawyer redirect.
+- "factual" questions get the normal cited-answer treatment (CLAUDE.md §3.5).
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ import sys
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from guardrail.classifier import classify_query
 from retrieval.vector_store import query as retrieve_chunks
 
 load_dotenv()
@@ -23,7 +29,13 @@ GENERATION_MODEL = "openai/gpt-oss-120b"
 MAX_TOKENS = 2048
 DEFAULT_TOP_K = 5
 
-SYSTEM_PROMPT = """You are an assistant that answers questions about Canadian study permits \
+OUT_OF_SCOPE_ANSWER = (
+    "I can only help with questions about Canadian study permits and related IRCC immigration "
+    "guidance — things like study permit eligibility, PGWP eligibility, and working while "
+    "studying. That question is outside what I can answer here."
+)
+
+BASE_RULES = """You are an assistant that answers questions about Canadian study permits \
 and related IRCC immigration guidance, using ONLY the numbered source excerpts provided in \
 the user message.
 
@@ -35,12 +47,28 @@ dates explicitly, prefer the more recently modified one, and flag the conflict r
 silently picking one.
 - If the provided sources don't contain enough information to answer, say so plainly instead \
 of guessing or using outside knowledge.
-- Do not make an individualized eligibility determination for the user's own situation — this \
-is general informational guidance based on public IRCC guidance, not legal advice, and does \
-not replace a licensed RCIC or immigration lawyer.
 - End your answer with a "Sources:" section listing, for each source you cited, its bracket \
 number, URL, and "last verified" date (the source's Last modified date).
 """
+
+FACTUAL_SYSTEM_PROMPT = (
+    BASE_RULES
+    + "\nAnswer the question directly using the sources above."
+)
+
+INDIVIDUALIZED_ADVICE_SYSTEM_PROMPT = (
+    BASE_RULES
+    + """
+IMPORTANT: this question asks for an individualized eligibility or advice determination about \
+the user's own specific situation. You must NOT state or imply whether they personally \
+qualify, will be approved, or what they specifically should do. Instead:
+- Explain the relevant general rules and criteria from the sources, with citations, so the \
+user understands what factors matter.
+- Explicitly and clearly state that determining how these rules apply to their specific case \
+requires a licensed RCIC (Regulated Canadian Immigration Consultant) or immigration lawyer — \
+this tool provides general information only, not individualized legal advice.
+"""
+)
 
 
 def _client() -> OpenAI:
@@ -66,10 +94,23 @@ def _format_sources(chunks: list[dict]) -> str:
 
 
 def answer_question(question: str, top_k: int = DEFAULT_TOP_K) -> dict:
+    classification = classify_query(question)
+    category = classification["category"]
+
+    if category == "out_of_scope":
+        return {"answer": OUT_OF_SCOPE_ANSWER, "sources": [], "category": category}
+
     chunks = retrieve_chunks(question, top_k=top_k)
     if not chunks:
-        return {"answer": "I don't have any indexed guidance to answer that.", "sources": []}
+        return {
+            "answer": "I don't have any indexed guidance to answer that.",
+            "sources": [],
+            "category": category,
+        }
 
+    system_prompt = (
+        INDIVIDUALIZED_ADVICE_SYSTEM_PROMPT if category == "individualized_advice" else FACTUAL_SYSTEM_PROMPT
+    )
     user_message = (
         f"Sources:\n\n{_format_sources(chunks)}\n\n"
         f"Question: {question}\n\n"
@@ -80,7 +121,7 @@ def answer_question(question: str, top_k: int = DEFAULT_TOP_K) -> dict:
         model=GENERATION_MODEL,
         max_tokens=MAX_TOKENS,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
     )
@@ -88,6 +129,7 @@ def answer_question(question: str, top_k: int = DEFAULT_TOP_K) -> dict:
 
     return {
         "answer": answer_text,
+        "category": category,
         "sources": [
             {
                 "n": i,
@@ -104,5 +146,5 @@ def answer_question(question: str, top_k: int = DEFAULT_TOP_K) -> dict:
 if __name__ == "__main__":
     question = " ".join(sys.argv[1:]) or "What are the eligibility requirements for a study permit?"
     result = answer_question(question)
-    print(f"Q: {question}\n")
+    print(f"Q: {question}  [category: {result['category']}]\n")
     print(result["answer"])

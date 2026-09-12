@@ -9,12 +9,24 @@ project spec, architecture, and guardrails.
 not immigration or legal advice.** It does not replace a licensed RCIC or
 immigration lawyer.
 
-## Status: Phase 2 (Basic RAG) complete
+## Status: Phase 3 (Guardrail / Scope Layer) complete
 
 What works end-to-end right now: ask a question via `/query` (or
-`generation/generator.py` directly) and get back an answer with inline `[n]`
-citations and a dated source list, grounded in the Phase 1 chunk corpus.
+`generation/generator.py` directly) and it's classified into one of three
+categories *before* retrieval or generation (CLAUDE.md §3.4), then answered
+accordingly with inline `[n]` citations and a dated source list.
 
+- **Guardrail classifier** (`guardrail/classifier.py`): a cheap Groq model
+  (`openai/gpt-oss-20b`) classifies each question as `factual`,
+  `individualized_advice`, or `out_of_scope` — run before any retrieval or
+  the (more expensive) generation call. `out_of_scope` questions are declined
+  immediately with zero retrieval/generation cost. `individualized_advice`
+  questions still retrieve general guidance, but generation is instructed to
+  never state or imply a personal eligibility determination and to
+  explicitly redirect to a licensed RCIC or immigration lawyer instead.
+  Classifier failures (network error, bad JSON) fail open to `factual` rather
+  than silently blocking every question. Scored 7/7 on a hand-crafted set
+  spanning all three categories.
 - **Embeddings**: `BAAI/bge-small-en-v1.5` via `sentence-transformers` — local,
   free, no API key.
 - **Vector store**: Chroma, persisted to `data/chroma/` (gitignored, rebuild
@@ -23,15 +35,16 @@ citations and a dated source list, grounded in the Phase 1 chunk corpus.
   the index — see "Known limitations" below.
 - **Retrieval**: naive top-k cosine similarity, no reranking yet (per
   CLAUDE.md §3.3/§6, reranking is a Phase 6 iteration on top of this baseline).
-- **Generation**: Groq (`openai/gpt-oss-120b`, OpenAI-compatible API) with a
-  system prompt enforcing inline `[n]` citations, a "Sources" footer with
-  per-source last-modified dates, explicit conflict-flagging when sources
-  disagree, and a refusal to answer beyond what the retrieved sources support.
-- **FastAPI**: `POST /query {"question": "...", "top_k": 5}` → `{"answer", "sources"}`.
+- **Generation**: Groq (`openai/gpt-oss-120b`) with a system prompt enforcing
+  inline `[n]` citations, a "Sources" footer with per-source last-modified
+  dates, explicit conflict-flagging when sources disagree, and (for
+  `individualized_advice` questions) a hard rule against personal
+  determinations.
+- **FastAPI**: `POST /query {"question": "...", "top_k": 5}` →
+  `{"answer", "sources", "category"}`.
 
-Not built yet: the guardrail/scope classifier (Phase 3), temporal-conflict
-surfacing beyond what the prompt does ad hoc (Phase 4), reranking, and the eval
-harness (Phase 5).
+Not built yet: temporal-conflict surfacing beyond what the prompt does ad hoc
+(Phase 4), reranking, and the eval harness (Phase 5).
 
 ### Known limitations (naive retrieval)
 
@@ -67,8 +80,8 @@ eval harness will want to measure.
   lookup table) are further split into embeddable-sized pieces rather than
   shipped as one giant chunk.
 
-Not built yet: the guardrail/scope classifier, temporal-conflict surfacing,
-reranking, and the eval harness (Phases 3–5).
+Not built yet: temporal-conflict surfacing, reranking, and the eval harness
+(Phases 4–5).
 
 ## Project structure
 
@@ -82,8 +95,10 @@ IRCC_Rag/
 ├── retrieval/          # embeddings + Chroma vector store + naive top-k retrieval
 │   ├── embedder.py      # bge-small-en-v1.5 wrapper (query vs. passage encoding)
 │   └── vector_store.py  # build_index() / query() against Chroma
+├── guardrail/          # scope classifier, run before retrieval/generation
+│   └── classifier.py    # classify_query() -> factual / individualized_advice / out_of_scope
 ├── generation/         # LLM answer generation with citations
-│   └── generator.py     # retrieval -> Groq call -> {answer, sources}
+│   └── generator.py     # classify -> retrieval -> Groq call -> {answer, sources, category}
 ├── eval/               # (Phase 5+) golden Q&A set, scoring harness
 ├── frontend/           # (Phase 7) chat UI
 ├── data/
