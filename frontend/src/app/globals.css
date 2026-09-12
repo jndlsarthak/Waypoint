@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+:root {
+  --background: #faf7f1;
+  --surface: #fffefb;
+  --surface-muted: #f2ede1;
+  --border: #e3dbc9;
+  --ink: #1a160f;
+  --ink-muted: #6f6656;
+  --accent: #1e4d3b;
+  --accent-strong: #163a2c;
+  --accent-soft: #e5ede7;
+  --amber: #a8722e;
+  --amber-soft: #f4e9d7;
+  --rust: #93412d;
+  --rust-soft: #f1e0da;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-rust: var(--rust);
+  --color-rust-soft: var(--rust-soft);
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-inter);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--ink);
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* Minimal prose styling for markdown-rendered chat answers — deliberately
+   restrained (no default Tailwind Typography plugin look) to match the rest
+   of the page. */
+.answer-prose p {
+  margin: 0 0 0.85em 0;
+}
+.answer-prose p:last-child {
+  margin-bottom: 0;
+}
+.answer-prose ul,
+.answer-prose ol {
+  margin: 0 0 0.85em 1.15em;
+}
+.answer-prose ul {
+  list-style-type: disc;
+}
+.answer-prose ol {
+  list-style-type: decimal;
+}
+.answer-prose li {
+  margin-bottom: 0.3em;
+}
+.answer-prose li::marker {
+  color: var(--ink-muted);
+}
+.answer-prose strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+.answer-prose a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+.answer-prose a:hover {
+  color: var(--accent-strong);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-up {
+  animation: fade-up 0.35s ease-out;
+}
+
+@keyframes pulse-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+.animate-pulse-dot {
+  animation: pulse-dot 1.2s infinite ease-in-out;
+}

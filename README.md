@@ -9,14 +9,32 @@ project spec, architecture, and guardrails.
 not immigration or legal advice.** It does not replace a licensed RCIC or
 immigration lawyer.
 
-## Status: Phase 6 (Iterate — reranking) complete
+## Status: Phase 7 (Deploy + polish — frontend) in progress
 
-What works end-to-end right now: ask a question via `/query` (or
-`generation/generator.py` directly) and it's classified into one of three
-categories *before* retrieval or generation (CLAUDE.md §3.4), retrieved via
-embeddings + cross-encoder reranking, checked for cross-source temporal
-conflicts, then answered with inline `[n]` citations, a dated source list,
-and a structured `temporal_conflicts` field.
+What works end-to-end right now: ask a question via the [frontend](frontend/)
+chat UI (or `POST /query` directly, or `generation/generator.py`) and it's
+classified into one of three categories *before* retrieval or generation
+(CLAUDE.md §3.4), retrieved via embeddings + cross-encoder reranking, checked
+for cross-source temporal conflicts, then answered with inline `[n]`
+citations, a dated source list, and a structured `temporal_conflicts` field.
+
+- **Frontend** (`frontend/`): Next.js + TypeScript + Tailwind v4 chat UI. See
+  [frontend/README.md](frontend/README.md) for design notes and how to run
+  it. Renders citations as designed source cards (page title, section
+  heading, "last verified" date, link) rather than raw markdown, gives the
+  three guardrail categories and temporal-conflict warnings their own visual
+  treatment, and shows the eval numbers as a stat strip. Verified visually
+  with Playwright screenshots during development (not a permanent
+  dependency) across the factual, individualized-advice, and out-of-scope
+  paths — all rendered correctly, including a real model quirk (occasional
+  full-width `【1】` citation brackets instead of ASCII `[1]`), which is now
+  normalized client-side.
+- Backend CORS (`main.py`) opened for `localhost:3000` so the frontend dev
+  server can call `/query`.
+
+Still to do for a complete Phase 7: an actual deployed link (Vercel for the
+frontend, Render/Railway for the backend per CLAUDE.md's suggested stack) —
+everything above currently runs locally.
 
 - **Reranking** (`retrieval/reranker.py`): CLAUDE.md §3.3's recommended fix
   for the naive-retrieval weakness diagnosed in Phase 2 — pulls a 30-chunk
@@ -108,7 +126,7 @@ and a structured `temporal_conflicts` field.
 - **FastAPI**: `POST /query {"question": "...", "top_k": 5}` →
   `{"answer", "sources", "category", "temporal_conflicts"}`.
 
-Not built yet: deployment (Phase 7).
+Not built yet: an actual deployed link (Vercel + Render/Railway).
 
 ### Known quirk: CLI exit code on macOS
 
@@ -180,7 +198,7 @@ IRCC_Rag/
 │   ├── golden_set.json  # 22 Q&A pairs across factual/individualized/out-of-scope
 │   ├── run_eval.py      # runs the golden set through the pipeline, scores it
 │   └── results.json     # latest run's per-question results (generated)
-├── frontend/           # (Phase 7) chat UI
+├── frontend/           # Next.js chat UI — see frontend/README.md
 ├── data/
 │   ├── raw_html/       # one .html per page
 │   ├── normalized_md/  # one .md per page

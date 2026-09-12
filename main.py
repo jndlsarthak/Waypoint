@@ -7,11 +7,21 @@ question was classified as.
 """
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from generation.generator import DEFAULT_TOP_K, answer_question
 
 app = FastAPI(title="IRCC Study Permit & Immigration Guidance Assistant")
+
+# Local frontend dev servers only — this is a portfolio demo with no user
+# accounts or sensitive data, so a permissive local-only CORS list is fine.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
 
 
 @app.get("/health")
